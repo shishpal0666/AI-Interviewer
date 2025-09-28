@@ -11,6 +11,10 @@ app.get('/api/hello', (req, res) => {
   res.json({ ok: true });
 });
 
+// Routes
+const uploadRouter = require('./routes/upload');
+app.use('/api', uploadRouter);
+
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
