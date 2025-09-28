@@ -1,12 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import api from '../api'
+
+const difficultySeconds = { easy: 20, medium: 60, hard: 120 }
 
 export default function Interview() {
   const [session, setSession] = useState(null)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [answer, setAnswer] = useState('')
   const [loading, setLoading] = useState(false)
-  const [timer, setTimer] = useState(600) 
+  const [timer, setTimer] = useState(0)
+  const autoSubmitting = useRef(false)
+
 
   useEffect(() => {
     let t
@@ -16,26 +20,12 @@ export default function Interview() {
     return () => clearTimeout(t)
   }, [timer])
 
-  async function start() {
-    setLoading(true)
-    try {
-  const res = await api.post('/api/interviews/start-interview', {})
-      setSession(res.data)
-      setCurrentIndex(0)
-      setAnswer('')
-      setTimer(600)
-    } catch (err) {
-      console.error(err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function submit() {
+  // Auto-submit when timer reaches 0 and we have a session + question
+  const submitCb = useCallback(async () => {
     if (!session || !session.sessionId) return
     setLoading(true)
     try {
-  const res = await api.post('/api/interviews/submit-answer', { sessionId: session.sessionId, questionIndex: currentIndex, answer })
+      const res = await api.post('/api/interviews/submit-answer', { sessionId: session.sessionId, questionIndex: currentIndex, answer })
       const { grade, nextQuestion, completed } = res.data
       const updated = { ...session }
       if (!updated.questions) updated.questions = []
@@ -47,13 +37,44 @@ export default function Interview() {
       } else if (nextQuestion) {
         setCurrentIndex(nextQuestion.index)
         setAnswer('')
+        // set timer for next question
+        setTimer(difficultySeconds[nextQuestion.difficulty] || 60)
       }
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
     }
+  }, [session, currentIndex, answer])
+
+  useEffect(() => {
+    if (timer === 0 && session && session.questions && session.questions[currentIndex]) {
+      if (autoSubmitting.current) return
+      autoSubmitting.current = true
+      submitCb().catch(e => console.error('auto-submit failed', e)).finally(() => { autoSubmitting.current = false })
+    }
+  }, [timer, session, currentIndex, submitCb])
+
+  async function start() {
+    setLoading(true)
+    try {
+      const res = await api.post('/api/interviews/start-interview', {})
+      const data = res.data
+      setSession(data)
+      setCurrentIndex(0)
+      setAnswer('')
+      // set initial timer based on first question
+      const first = data?.questions?.[0]
+      setTimer(first ? (difficultySeconds[first.difficulty] || 60) : 60)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
   }
+
+  // submit is a wrapper that calls submitCb (used by manual button)
+  function submit() { submitCb() }
 
   const currentQuestion = session?.questions ? session.questions[currentIndex] : null
 
