@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
@@ -13,7 +14,10 @@ app.get('/api/hello', (req, res) => {
 
 // Routes
 const uploadRouter = require('./routes/upload');
+const genaiRouter = require('./routes/genai');
 app.use('/api', uploadRouter);
+app.use('/api/genai', genaiRouter);
+
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
